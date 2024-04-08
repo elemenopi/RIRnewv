@@ -1,0 +1,15 @@
+# Ignore OUTPUTS folder
+OUTPUTS/
+
+# Ignore LibriSpeech folder
+LibriSpeech/
+
+# Ignore venv folder
+venv/
+__pycache__/utils.cpython-310.pyc
+__pycache__/main.cpython-310.pyc
+__pycache__/constants.cpython-310.pyc
+__pycache__/data_augmentation.cpython-310.pyc
+train/__pycache__/custom_dataset.cpython-310.pyc
+room_1.pk1
+PytorchDataset

@@ -1,0 +1,3 @@
+
+class RandomAudioPerturbation(object):
+    pass
