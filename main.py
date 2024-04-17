@@ -348,7 +348,61 @@ class generate_rirs:
         os.makedirs(new_folder_path)
 
         return new_folder_path
-    
+    def Generate_bg_signals(self,room_dim,mic_locs,fs ,max_order ,rt60tgt ,type_of_speakers = "mixture",mixture = []):
+        #make the room
+        e_absorption,max_order = pra.inverse_sabine(rt60tgt,room_dim)
+        room = pra.ShoeBox(room_dim,fs = fs,max_order = max_order,materials = pra.Material(e_absorption))
+        room.add_microphone_array(mic_locs)
+        #add bg locations
+        bg_loc1 = [0.2,0.2,1.4]
+        bg_loc2 = [self.roomDims[0]-0.2,self.roomDims[1]-0.2,1.4]
+        bg_loc3 = [self.roomDims[0]-0.2,0.2,1.4]
+        bg_loc4 = [0.2,self.roomDims[1]-0.2,1.4]
+        bg_locs = [bg_loc1,bg_loc2,bg_loc3,bg_loc4]
+        #add speakers according to type
+        if type_of_speakers == "mixture":
+            signal1 =signal2 = signal3 = signal4 =mixture
+        if type_of_speakers == "singles":
+            pass#to implement later
+        room.add_source(bg_loc1, signal1)
+        room.add_source(bg_loc2, signal2)
+        room.add_source(bg_loc3, signal3)
+        room.add_source(bg_loc4, signal4)
+        #simulate room and get the rirs
+        room.simulate()
+
+        rirs = room.rir
+        
+        ms50Idx = int(0.05*fs)
+        
+        #get the post 50ms part of rir
+        signals = [signal1,signal2,signal3,signal4]
+        total_signal = np.zeros((len(rirs), len(signals[0])))
+        #for idx,speaker_rirs in enumerate(rirs):
+        #    total_signal_current_speaker = []
+        #    for microphone_for_speaker_rir in speaker_rirs:
+        #        microphone_for_speaker_rir[:ms50Idx] = 0
+        #        convolved_signal_rir = np.convolve(signals[idx], microphone_for_speaker_rir, mode='full')
+        #        total_signal_current_speaker.append(convolved_signal_rir)
+        #    total_signal.append(np.sum(total_signal_current_speaker,axis = 0))
+#
+        #total_signal = np.sum(total_signal,axis = 0)
+
+        for mic_idx in range(len(rirs)):
+            mic_signal = np.zeros(len(signals[0]))
+            for speaker_idx in range(len(rirs[0])):
+                speaker_rir = rirs[mic_idx][speaker_idx]
+                speaker_rir[:ms50Idx] = 0
+                convolved_signal_rir = np.convolve(signals[speaker_idx],speaker_rir,mode = "full")
+                mic_signal+=convolved_signal_rir[:len(signals[0])]
+            
+            #total_signal.append(mic_signal)
+            total_signal[mic_idx] = mic_signal
+        return bg_locs,total_signal
+
+
+        #convolve each speaker through its microphones
+        #add all up and return the sum
     def generate_channels_V2(self,directions,rt60tgt = 0.7):
         room_dim = self.roomDims
         rt60_tgt = rt60tgt
@@ -386,29 +440,34 @@ class generate_rirs:
             room.simulate()#builds the rirs automatically
             fg_signals = room.mic_array.signals[:,:total_samples]
             #fg_target = np.random.uniform(FG_VOL_MIN, FG_VOL_MAX)
-            fg_signals = fg_signals#/abs(fg_signals).max()
+            fg_signals = fg_signals/abs(fg_signals).max()
             all_fg_signals.append(fg_signals)
+            
             #room.mic_array.to_wav(
             #    f"result_post_pyroom.wav",
             #    bitdepth=np.int16,
             #)
+        #get bg recording
         if bg_recording is not None:
             bg_length = len(bg_recording)
             bg_start_idx = np.random.randint(bg_length - total_samples)
             sample_bg = bg_recording[bg_start_idx:bg_start_idx + total_samples]
             sample_bg = sample_bg/abs(sample_bg).max()
+        #generate bg signals for room
         if bg_recording is not None:
-            bg_radius = np.random.uniform(3.8,4.2)
-            bg_theta = np.random.uniform(0,2*np.pi)
-            bg_loc = [0.1,0.1,1.2]#[bg_radius*np.cos(bg_theta),bg_radius*np.sin(bg_theta),np.random.uniform(1.2,1.5)]
-            room = pra.ShoeBox(room_dim,fs = fs,max_order = max_order,materials = pra.Material(e_absorption))
-            room.add_source(bg_loc,signal = sample_bg)
             mic_locs = np.array(self.microphones).transpose()  # Assuming mic_array is defined somewhere
-            room.add_microphone_array(mic_locs)
-            room.simulate()
-            bg_signals = room.mic_array.signals[:,:total_samples]
+            bg_locs, bg_signals = self.Generate_bg_signals(room_dim,mic_locs,fs ,10 ,rt60_tgt ,"mixture",sample_bg)
+            bg_signals = np.array(bg_signals)
+            #bg_radius = np.random.uniform(3.8,4.2)
+            #bg_theta = np.random.uniform(0,2*np.pi)
+            #g_loc = [0.1,0.1,1.2]#[bg_radius*np.cos(bg_theta),bg_radius*np.sin(bg_theta),np.random.uniform(1.2,1.5)]
+            #room = pra.ShoeBox(room_dim,fs = fs,max_order = max_order,materials = pra.Material(e_absorption))
+            #room.add_source(bg_loc,signal = sample_bg)
+            #room.add_microphone_array(mic_locs)
+            #room.simulate()
+            #bg_signals = room.mic_array.signals[:,:total_samples]
             bg_target = np.random.uniform(0.4, 0.7)
-            bg_signals = bg_signals * bg_target / abs(bg_signals).max() 
+            bg_signals = bg_signals * bg_target / np.max(np.abs(bg_signals))
             
 
         outputDirectory ='OUTPUTS'
@@ -437,8 +496,10 @@ class generate_rirs:
                 'speaker_id': speaker_id
             }
         if bg_recording is not None:
-            r,theta = utils.convertCartesianToPolar(bg_loc[0],bg_loc[1],self.micArrayCenter[0],self.micArrayCenter[1])
-            metadata['bg'] = {'position':[r,theta,bg_loc[2]]}
+            for i in range(4):
+                r,theta = utils.convertCartesianToPolar(bg_locs[i][0],bg_locs[i][1],self.micArrayCenter[0],self.micArrayCenter[1])
+                metadata[f'bg{i}'] = {'position':[r,theta,bg_locs[i][2]]}
+            
         metadata_file = str(Path(latestFolder)/"metadata.json")
         with open(metadata_file,"w") as f:
             json.dump(metadata,f,indent = 4)
@@ -583,21 +644,21 @@ def rotate_points_numpy(points, theta):
 g = generate_rirs()
 g.setRoomIdx(1)
 g.setNumOfSpeakers(2)
-res = g.gather_wav_files(r"C:\Users\lipov\Documents\GitHub\project\RIRnewv\LibriSpeech","Train",1)
+res = g.gather_wav_files(r"C:\Users\lipov\Documents\GitHub\project\RIRnewv\LibriSpeech","Train",1)#this gets all the sound files possible
  
-g.background_samples(3)
+g.background_samples(3)#unused for now
  
 
 print(res)
 print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
 #sample 1-2 random soun
 # ds from train
-g.get_random_sounds(res,num_speakers = 2)
+g.get_random_sounds(res,num_speakers = 2)#this chooses num_speekers speakers and takes a random sound from that speaker
 g.generate_room_dimensions()
 g.set_limits()
 g.generate_mic_array("circular")
 g.generate_speaker_placements(2)
-directions = g.showRoom()
+directions = g.showRoom()#generates speaking directions for the speakers, unused now
 #g.generate_channels(directions)
 g.generate_channels_V2(directions)
 
