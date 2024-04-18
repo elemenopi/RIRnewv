@@ -4,6 +4,13 @@ def convertCartesianToPolar(x, y, BaseX, BaseY):
     Radius = np.sqrt(np.power(x - BaseX, 2) + np.power(y - BaseY, 2))
     Theta = np.arctan2(y - BaseY, x - BaseX)
     return Radius, Theta
+def get_mixed(mixed, noise, snr):
+        # snr = 0
+        mix_std = np.std(mixed)
+        noise_std = np.std(noise)
+        noise_gain = np.sqrt(10 ** (-snr / 10) * np.power(mix_std, 2) / np.power(noise_std, 2))
+        noise = noise_gain * noise
+        return noise
 def get_starting_angles(window_size):
     divisor = int(round(2*np.pi/window_size))
     return np.array(list(range(-divisor+1,divisor+2)))*np.pi/divisor

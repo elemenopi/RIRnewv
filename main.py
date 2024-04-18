@@ -402,7 +402,7 @@ class generate_rirs:
 
         #convolve each speaker through its microphones
         #add all up and return the sum
-    def generate_channels_V2(self,directions,rt60tgt = 0.7):
+    def generate_channels_V2(self,directions,rt60tgt = 0.7,snr = 7):
         room_dim = self.roomDims
         rt60_tgt = rt60tgt
         bg_recording = self.generateRandomMixture(30)
@@ -467,8 +467,19 @@ class generate_rirs:
             #bg_signals = room.mic_array.signals[:,:total_samples]
             bg_target = np.random.uniform(0.4, 0.7)
             bg_signals = bg_signals * bg_target / np.max(np.abs(bg_signals))
-            
+        
+        
+        #snr calculations
+        if snr!=1:
+            for i in range(6):# for each microphone 
+                fg = []
+                for voice_idx in range(self.numOfSpeakers):
+                    fg.append(all_fg_signals[voice_idx][i])
 
+                mixed_signal = np.sum(fg,axis = 0)
+                bg = bg_signals[i]
+                bg_signals[i] = utils.get_mixed(mixed_signal,bg,snr)
+            
         outputDirectory ='OUTPUTS'
         latestFolder = self.create_next_folder(outputDirectory,'output')
         for mic_idx in range(len(self.microphones)):
