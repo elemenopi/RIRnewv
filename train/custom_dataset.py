@@ -8,7 +8,6 @@ import utils
 from data_augmentation import RandomAudioPerturbation
 import librosa
 from constants import FAR_FIELD_RADIUS,ALL_WINDOW_SIZES
-
 import matplotlib.pyplot as plt
 
 
@@ -16,7 +15,6 @@ class customdataset(torch.utils.data.Dataset):
     def __init__(self,input_dir,n_mics = 6,sr = 44100,perturb_prob = 0.0,window_idx = -1,negatives = 0.2,mic_radius = 0.0725):
         super().__init__()
         self.dirs = sorted(list(Path(input_dir).glob('*[0-9]')))
-
         self.n_mics = n_mics
         self.sr = sr
         self.mic_radius = mic_radius
@@ -25,7 +23,7 @@ class customdataset(torch.utils.data.Dataset):
         
         self.negatives = negatives
         self.window_idx = window_idx
-    def __len__(self,input_dir,n_mics = 6,sr = 44100,perturb_prob = 0.0,window_idx = -1,negatives = 0.2,mic_radius = 0.0725):
+    def __len__(self):
         return len(self.dirs)
     def __getitem__(self,idx:int):
         num_windows = len(ALL_WINDOW_SIZES)
@@ -55,6 +53,7 @@ class customdataset(torch.utils.data.Dataset):
         all_sources = torch.stack(all_sources,dim = 0)# [src1,src2,...],srci = [fval,....]
         mixed_data = torch.sum(all_sources,dim = 0)
 
+        
         target_voice_data = torch.stack(target_voice_data,dim = 0)
         target_voice_data = torch.sum(target_voice_data,dim = 0)
         window_idx_one_hot = torch.tensor(utils.to_categorical(curr_window_idx,num_windows)).float()
@@ -69,7 +68,12 @@ class customdataset(torch.utils.data.Dataset):
         all_sources = []
         target_voice_data = []
         for key in metadata.keys():
-            gt_audio_files = sorted(list(Path(curr_dir).rglob("*"+key+".wav")))
+            if "bg" in key:
+                continue
+            gt_audio_files = sorted(list(Path(curr_dir).rglob("*.wav")))
+
+            gt_audio_files = [file for file in gt_audio_files if ('voice' in file.stem and key in file.stem)]
+ 
             assert len(gt_audio_files) > 0 , "no files found"
             gt_waveforms = []
             for _,gt_audio_file in enumerate(gt_audio_files):
@@ -77,19 +81,20 @@ class customdataset(torch.utils.data.Dataset):
                 gt_waveforms.append(torch.from_numpy(gt_waveform))
                 shifted_gt,_ = utils.shift_mixture(np.stack(gt_waveforms),target_pos,self.mic_radius,self.sr)
 
-            #data augmentation goes here
-            #data augmentation goes here
-            #data augmentation goes here
-            #data augmentation goes here
-            #data augmentation goes here
+
 
             perturbed_source = torch.tensor(shifted_gt).float()
             all_sources.append(perturbed_source)
             if "bg" in key:
                 continue
             locs_voice = metadata[key]["Position"]
-            voice_angle = np.arctan2(locs_voice[1],locs_voice[0])
+            #voice_angle = np.arctan2(locs_voice[1],locs_voice[0])
+            voice_angle = locs_voice[1]
             #todo : take into account front back confusion
+            print("the voice angle from metadata")
+            print(voice_angle)
+            print("for the key")
+            print(key)
             if abs(voice_angle - target_angle)<(curr_window_size/2):
                 target_voice_data.append(perturbed_source.view(perturbed_source.shape[0],perturbed_source.shape[1]))
             else:
@@ -106,6 +111,8 @@ class customdataset(torch.utils.data.Dataset):
 
         angle_idx = (np.abs(candidate_angles - voice_angle)).argmin()
         target_angle = candidate_angles[angle_idx]
+        print("chosen positive, target angle")
+        print(target_angle)
         return target_angle
     
     def get_negative_region(self,metadata,candidate_angles):
@@ -134,4 +141,6 @@ class customdataset(torch.utils.data.Dataset):
             _,curr_shift = utils.shift_mixture(np.zeros((self.n_mics,10)),random_pos,self.mic_radius,self.sr)
             if true_shift!=curr_shift:
                 matching_shift = False
+        print("chosen negative, target angle")
+        print(target_angle)
         return target_angle

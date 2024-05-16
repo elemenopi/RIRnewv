@@ -89,4 +89,32 @@ def create_bg(self):
         pass
     def generateRoom(self):
         room = pra.ShoeBox(self.roomDims,fs = 16000,max_order = 10)
+    def gather_wav_files_old(self,root_folder,train_test,all):
+        #train_test = "Test"\"Train"
         
+        in_folder = os.path.join(root_folder, train_test)
+
+        if not os.path.exists(in_folder):
+            print(f"{train_test} folder not found.")
+            return
+
+        output_folders = {}#speaker:[soundsfiles...]
+
+        for speaker_folder in os.listdir(in_folder):
+            speaker_path = os.path.join(in_folder, speaker_folder)
+
+            if os.path.isdir(speaker_path):
+                output_folders[speaker_folder] = []
+
+                for sound_folder in os.listdir(speaker_path):
+                    sound_path = os.path.join(speaker_path, sound_folder)
+                    if os.path.isdir(sound_path):
+                        for filename in os.listdir(sound_path):
+                            if filename.endswith(".wav"):
+                                src_filepath = os.path.join(sound_path, filename)
+                                output_folders[speaker_folder].append(src_filepath)
+                        if all == 0:
+                            #if all is 0 then take one random and continue
+                            output_folders[speaker_folder] = random.choice(output_folders[speaker_folder])
+
+        return output_folders

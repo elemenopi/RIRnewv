@@ -6,27 +6,19 @@ import json
 import random
 import torch
 import matplotlib.pyplot as plt
-from utils import get_starting_angles
-from train.custom_dataset import customdataset
-images = np.array([[[ 10,  20,  30],  # Image 1
-                    [ 40,  50,  60],
-                    [ 70,  80,  90]],
+from scipy.signal import fftconvolve, oaconvolve
+import time
 
-                   [[100, 110, 120],  # Image 2
-                    [130, 140, 150],
-                    [160, 170, 180]],
+import soundfile as sf
 
-                   [[190, 200, 210],  # Image 3
-                    [220, 230, 240],
-                    [250, 255, 255]]])
-print(np.sum(images,axis = 2))
-#import main
-#sound_dataset = customdataset("OUTPUTS")
-#res = sound_dataset.__getitem__(8)
+s1, fs1 = sf.read("C://Users//lipov//Documents//GitHub//project//RIRnewv//LibriSpeech//Train//1919//142785//1919-142785-0001.wav")
+s2, fs2 = sf.read("C://Users//lipov//Documents//GitHub//project//RIRnewv//LibriSpeech//Train//3536//23268//3536-23268-0001.wav")
+plt.plot(s2)
+plt.show()
+res = utils.get_mixed(s1, s2, 10)
+plt.plot(res)
+plt.show()
+write("res_get_mixed.wav", 16000, res)
+res = np.arctan2(2,2)
 
-#print(type(res[0][0]))
-#print(res[1].shape[0])
-#write("res_mixed_data_getitem.wav",44100,np.array(res[0][0]))
-#write("res_target_data_getitem.wav", 44100,np.array(res[1][0]))
-#g = main.generate_rirs()
-#g.generateRandomMixture(10)
+print(res)
