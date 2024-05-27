@@ -1,13 +1,19 @@
+import sys
+import os
+
+# Add the parent directory to the sys.path
+sys.path.append(os.path.abspath('..'))
+
 import torch
 import torchvision
 import numpy as np
 from pathlib import Path
 import json
 import random
-import utils
-from data_augmentation import RandomAudioPerturbation
+import RIRnewv.utils as utils
+from RIRnewv.data_augmentation import RandomAudioPerturbation
 import librosa
-from constants import FAR_FIELD_RADIUS,ALL_WINDOW_SIZES
+from RIRnewv.constants import FAR_FIELD_RADIUS,ALL_WINDOW_SIZES
 import matplotlib.pyplot as plt
 
 
@@ -91,10 +97,10 @@ class customdataset(torch.utils.data.Dataset):
             #voice_angle = np.arctan2(locs_voice[1],locs_voice[0])
             voice_angle = locs_voice[1]
             #todo : take into account front back confusion
-            print("the voice angle from metadata")
-            print(voice_angle)
-            print("for the key")
-            print(key)
+            #print("the voice angle from metadata")
+            #print(voice_angle)
+            #print("for the key")
+            #print(key)
             if abs(voice_angle - target_angle)<(curr_window_size/2):
                 target_voice_data.append(perturbed_source.view(perturbed_source.shape[0],perturbed_source.shape[1]))
             else:
@@ -111,8 +117,8 @@ class customdataset(torch.utils.data.Dataset):
 
         angle_idx = (np.abs(candidate_angles - voice_angle)).argmin()
         target_angle = candidate_angles[angle_idx]
-        print("chosen positive, target angle")
-        print(target_angle)
+        #("chosen positive, target angle")
+        #print(target_angle)
         return target_angle
     
     def get_negative_region(self,metadata,candidate_angles):
@@ -141,6 +147,6 @@ class customdataset(torch.utils.data.Dataset):
             _,curr_shift = utils.shift_mixture(np.zeros((self.n_mics,10)),random_pos,self.mic_radius,self.sr)
             if true_shift!=curr_shift:
                 matching_shift = False
-        print("chosen negative, target angle")
-        print(target_angle)
+        #print("chosen negative, target angle")
+        #print(target_angle)
         return target_angle

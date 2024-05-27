@@ -1,28 +1,19 @@
 import matplotlib.pyplot as plt
 import os
-import pandas as pd
 import numpy as np
 from scipy.io.wavfile import read,write
 from scipy.signal import convolve,fftconvolve
-import sounddevice as sd
-import itertools
 import time
 import constants
 import soundfile as sf
 import random
 import math
+import numpy as np
 import json
 import pyroomacoustics as pra
-import pickle
 import utils
 from pathlib import Path
-import librosa
 from concurrent.futures import ProcessPoolExecutor
-from pyroomacoustics.directivities import (
-    DirectivityPattern,
-    DirectionVector,
-    CardioidFamily,
-)
 
 class generate_rirs:
     #self.microphones
@@ -55,7 +46,8 @@ class generate_rirs:
         self.generate_speaker_placements()
         #g.showRoom()#generates speaking directions for the speakers, unused now
         print("generating the chanels - final sound")
-        self.generate_channels_V2(isBackground = random.choice([True,False]))
+        #
+        self.generate_channels_V2(isBackground = True)
     def generate_rooms_concurrently(self, num_rooms, speakers, datafolder, trainORtest, allORpart, shape):
         # Set the number of rooms to generate concurrently
         with ProcessPoolExecutor() as executor:
@@ -382,7 +374,7 @@ class generate_rirs:
                 speaker_rir = utils.highpass_filter(speaker_rir,50,fs)
                 convolved_signal_rir = fftconvolve(signals[speaker_idx],speaker_rir,mode = "full")
                 mic_signal+=convolved_signal_rir[:len(signals[0])]
-            
+
             total_signal[mic_idx] = mic_signal
 
         return bg_locs,total_signal,speakers
@@ -432,16 +424,16 @@ class generate_rirs:
             fg_signals = room.mic_array.signals[:,:total_samples]
             #fg_target = np.random.uniform(FG_VOL_MIN, FG_VOL_MAX)
             
-            fg_signals = fg_signals/abs(fg_signals).max()
+            #fg_signals = fg_signals/abs(fg_signals).max()
             all_fg_signals.append(fg_signals)
 
         #generate bg signals for room
-        if bg_recording is not False:
+        if bg_recording:
             mic_locs = np.array(self.microphones).transpose()  # Assuming mic_array is defined somewhere
-            bg_locs, bg_signals,bg_speakers = self.Generate_bg_signals(room_dim,mic_locs,fs ,10 ,rt60_tgt ,"singles",total_seconds = 30)
+            bg_locs, bg_signals,bg_speakers = self.Generate_bg_signals(room_dim,mic_locs,fs ,10 ,rt60_tgt ,"singles",total_seconds = duration)
             bg_signals = np.array(bg_signals)
             bg_target = 1#np.random.uniform(0.4, 0.7)
-            bg_signals = bg_signals * bg_target / np.max(np.abs(bg_signals))
+            #bg_signals = bg_signals * bg_target / np.max(np.abs(bg_signals))
             #signals_for_testing = signals_for_testing * bg_target/ np.max(np.abs(signals_for_testing))
             
         #beta = utils.get_mixed
@@ -450,19 +442,28 @@ class generate_rirs:
             for j in range(len(all_fg_signals[0])):
                 all_fg_signals[i][j] = utils.highpass_filter(all_fg_signals[i][j],50,fs)
 
-
-        #snr calculations
-        if bg_recording is not False:
-            if snr!=0:
-                for i in range(6):# for each microphone 
+        beta = 1
+        # SNR calculations
+        if bg_recording:
+            if snr != 0:
+                bg_total = np.sum(bg_signals, axis=0)
+                max_mixed_with_bg = None
+                for i in range(6):  # for each microphone
+                    
                     fg = []
                     for voice_idx in range(self.numOfSpeakers):
                         fg.append(all_fg_signals[voice_idx][i])
+                    mixed_signal = np.sum(fg, axis=0)
+                    current_mixed_with_bg = mixed_signal + bg_total
 
-                    mixed_signal = np.sum(fg,axis = 0)
-                    bg = bg_signals[i]
+                    if max_mixed_with_bg is None:
+                        max_mixed_with_bg = current_mixed_with_bg
+                    else:
+                        max_mixed_with_bg = np.maximum(max_mixed_with_bg, current_mixed_with_bg)
+                    bg_signals[i] = utils.get_mixed(mixed_signal, bg_total, snr)
 
-                    bg_signals[i] = utils.get_mixed(mixed_signal,bg,snr)
+        if bg_recording:
+            beta = 1 / np.max(np.abs(max_mixed_with_bg))
 
 
         outputDirectory ='OUTPUTS'
@@ -472,11 +473,13 @@ class generate_rirs:
             all_fg_buffer = np.zeros((total_samples))
             for voice_idx in range(self.numOfSpeakers):
                 curr_fg_buffer = np.pad(all_fg_signals[voice_idx][mic_idx],(0,total_samples))[:total_samples]
-                
+                if bg_recording :
+                    curr_fg_buffer = curr_fg_buffer*beta #s_tilda
                 write(output_prefix + "voice{:02d}.wav".format(voice_idx),  fs,curr_fg_buffer)#.astype(np.int16) )#32
                 all_fg_buffer+=curr_fg_buffer
-            if bg_recording is not False:
+            if bg_recording :
                 bg_buffer = np.pad(bg_signals[mic_idx],(0,total_samples))[:total_samples]
+                bg_buffer = bg_buffer*beta # n_tilda_tilda
                 write(output_prefix + f"bg{mic_idx}.wav",fs,bg_buffer)
                 write(output_prefix+"mixed.wav",fs,all_fg_buffer+bg_buffer)
             else:
