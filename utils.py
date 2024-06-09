@@ -54,7 +54,7 @@ def get_mixed(mixed, noise, snr):
         noise_std = np.std(noise)
         noise_gain = np.sqrt(10 ** (-snr / 10) * np.power(mix_std, 2) / np.power(noise_std, 2))
         noise = noise_gain * noise
-        return noise
+        return noise,noise_gain
 def get_starting_angles(window_size):
     divisor = int(round(2*np.pi/window_size))
     return np.array(list(range(-divisor+1,divisor+2)))*np.pi/divisor

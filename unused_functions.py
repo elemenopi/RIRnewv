@@ -118,3 +118,22 @@ def create_bg(self):
                             output_folders[speaker_folder] = random.choice(output_folders[speaker_folder])
 
         return output_folders
+
+
+    #def generateRandomMixture(self,total_seconds):
+    #    #to add: repeating sound
+    #    allSoundsTrain = self.gather_wav_files(r"C:\Users\lipov\Documents\GitHub\project\RIRnewv\LibriSpeech","Train",1)
+    #    allSoundsTest = self.gather_wav_files(r"C:\Users\lipov\Documents\GitHub\project\RIRnewv\LibriSpeech","Test",1)
+    #    
+    #    final_sound_buffer = 0
+    #    for k in allSoundsTest.keys():
+    #        s_path = random.choice(allSoundsTest[k])
+    #        s,fs = sf.read(s_path)
+    #        total_samples = int(total_seconds*fs)
+    #        s = s/abs(s).max()
+    #        while len(s)<total_seconds*fs:
+    #            s = np.tile(s, 2)
+    #        s = np.pad(s,(0,total_samples))[:total_samples]
+    #        final_sound_buffer+=s
+    #    
+    #    return final_sound_buffer/abs(final_sound_buffer).max()

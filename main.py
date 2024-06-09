@@ -4,7 +4,6 @@ import numpy as np
 from scipy.io.wavfile import read,write
 from scipy.signal import convolve,fftconvolve
 import time
-import constants
 import soundfile as sf
 import random
 import math
@@ -14,6 +13,28 @@ import pyroomacoustics as pra
 import utils
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
+import yaml
+from dbs.db_model import AudioDatabase, gather_wav_files
+yaml_file_path = Path(__file__).resolve().parent / 'constants.yaml'
+
+# Load constants from YAML file
+with open(yaml_file_path, "r") as file:
+    config = yaml.safe_load(file)
+
+# Extracting constants from the YAML config
+SPEED_OF_SOUND = config['SPEED_OF_SOUND']
+FAR_FIELD_RADIUS = config['FAR_FIELD_RADIUS']
+ALL_WINDOW_SIZES = [np.array(value) for value in config['ALL_WINDOW_SIZES']]
+NUM_OF_ROOMS = config['NUM_OF_ROOMS']
+root_data_folder = config['root_data_folder']
+min_room_x = config['min_room_x']
+min_room_y = config['min_room_y']
+min_room_z = config['min_room_z']
+max_room_x = config['max_room_x']
+max_room_y = config['max_room_y']
+max_room_z = config['max_room_z']
+
+
 
 class generate_rirs:
     #self.microphones
@@ -28,26 +49,33 @@ class generate_rirs:
     #self.numOfspeakers
     #self.sample_bg
     def __init__(self):
-        self.min_room_x = constants.min_room_x 
-        self.min_room_y = constants.min_room_y 
-        self.min_room_z = constants.min_room_z
-        self.max_room_x = constants.max_room_x 
-        self.max_room_y = constants.max_room_y 
-        self.max_room_z = constants.max_room_z
-    def generateRoom(self,speakers,datafolder,trainORtest,allORpart,shape):
+        self.min_room_x = min_room_x 
+        self.min_room_y = min_room_y 
+        self.min_room_z = min_room_z
+        self.max_room_x = max_room_x 
+        self.max_room_y = max_room_y 
+        self.max_room_z = max_room_z
+    def generateRoom(self,speakers,trainORtest,shape):
+        self.setDatabase()
         self.setNumOfSpeakers(speakers)
-        res = self.gather_wav_files(datafolder,trainORtest,allORpart)#this gets all the sound files possible
+        #res = self.gather_wav_files(datafolder,trainORtest,allORpart)#this gets all the sound files possible
         
-        self.get_random_sounds(res,speakers)#this chooses num_speekers speakers and takes a random sound from that speaker
+        self.get_random_sounds(speakers,trainORtest)#this chooses num_speekers speakers and takes a random sound from that speaker
 
         self.generate_room_dimensions()
         self.set_limits()
         self.generate_mic_array(shape)
         self.generate_speaker_placements()
-        #g.showRoom()#generates speaking directions for the speakers, unused now
+        g.showRoom()#generates speaking directions for the speakers, unused now
         print("generating the chanels - final sound")
         #
         self.generate_channels_V2(isBackground = True)
+    def setDatabase(self):
+        db_path_train = "dbs//audio_files_Train.db"
+        db_path_test = "dbs//audio_files_Test.db"
+        self.audio_db_train = AudioDatabase(db_path_train)
+        self.audio_db_test = AudioDatabase(db_path_test)
+        
     def generate_rooms_concurrently(self, num_rooms, speakers, datafolder, trainORtest, allORpart, shape):
         # Set the number of rooms to generate concurrently
         with ProcessPoolExecutor() as executor:
@@ -82,7 +110,7 @@ class generate_rirs:
 
         helper(0,[])
         return res
-
+    
     def gather_wav_files(self, root_folder: str, train_test: str, all: int) -> dict:
         """
         Gathers `.wav` files from a specified directory structure.
@@ -125,8 +153,25 @@ class generate_rirs:
                     output_folders[speaker_folder] = sound_files
 
         return output_folders
+    def get_random_sounds(self,num_speakers,trainOrTest):
+        random_sounds = {}
 
-    def get_random_sounds(self,speaker_sound_map, num_speakers):
+        if trainOrTest.lower() == "Train":
+            for _ in range(num_speakers):
+                speaker = self.audio_db_train.get_random_speaker()
+                sound_for_speaker = self.audio_db_train.get_random_file(speaker)
+                random_sounds[speaker] = sound_for_speaker
+        else:
+            for _ in range(num_speakers):
+                speaker = self.audio_db_test.get_random_speaker()
+                sound_for_speaker = self.audio_db_test.get_random_file(speaker)
+                random_sounds[speaker] = sound_for_speaker
+
+        
+        self.speaker_soundfile_map =random_sounds
+        
+        return self.speaker_soundfile_map
+    def get_random_sounds_old(self,speaker_sound_map, num_speakers,trainOrTest):
 
         selected_speakers = random.sample(list(speaker_sound_map.keys()), num_speakers)
 
@@ -140,7 +185,11 @@ class generate_rirs:
             if sounds_for_speaker:
                 random_sound = random.choice(sounds_for_speaker)
                 random_sounds[speaker] = random_sound
+
+
+        print("speaker:sound")
         self.speaker_soundfile_map =random_sounds
+        print(self.speaker_soundfile_map)
         return self.speaker_soundfile_map
     def generate_room_dimensions(self):
         room_x = round(random.uniform(self.min_room_x, self.max_room_x), 4)
@@ -168,7 +217,7 @@ class generate_rirs:
             center = [mic_x,mic_y]
             self.micArrayCenter = center
             num_points = 6
-            radius = 0.075 #cm
+            radius = 0.0926/2 
             angular_difference_degrees = 60
             for i in range(num_points):
                 angle = math.radians(i * angular_difference_degrees)
@@ -279,23 +328,6 @@ class generate_rirs:
         # Show the plot
         plt.show()
 
-    def generateRandomMixture(self,total_seconds):
-        #to add: repeating sound
-        allSoundsTrain = self.gather_wav_files(r"C:\Users\lipov\Documents\GitHub\project\RIRnewv\LibriSpeech","Train",1)
-        allSoundsTest = self.gather_wav_files(r"C:\Users\lipov\Documents\GitHub\project\RIRnewv\LibriSpeech","Test",1)
-        
-        final_sound_buffer = 0
-        for k in allSoundsTest.keys():
-            s_path = random.choice(allSoundsTest[k])
-            s,fs = sf.read(s_path)
-            total_samples = int(total_seconds*fs)
-            s = s/abs(s).max()
-            while len(s)<total_seconds*fs:
-                s = np.tile(s, 2)
-            s = np.pad(s,(0,total_samples))[:total_samples]
-            final_sound_buffer+=s
-        
-        return final_sound_buffer/abs(final_sound_buffer).max()
 
     
     def create_next_folder(self,base_folder, folder_prefix):
@@ -341,14 +373,16 @@ class generate_rirs:
             signal1 =signal2 = signal3 = signal4 =mixture
         speakers = []
         if type_of_speakers == "singles":
-            speakers = ["\\5338\\24640\\5338-24640-0000.wav",
-                        "\\3853\\163249\\3853-163249-0002.wav",
-                        "\\8297\\275154\\8297-275154-0026.wav",
-                        "\\6295\\244435\\6295-244435-0000.wav"]
-            signal1,fs = sf.read("C:\\Users\\lipov\\Documents\\GitHub\\project\\RIRnewv\\LibriSpeech\\Test"+speakers[0])
-            signal2,fs = sf.read("C:\\Users\\lipov\\Documents\\GitHub\\project\\RIRnewv\\LibriSpeech\\Test"+speakers[1])
-            signal3,fs = sf.read("C:\\Users\\lipov\\Documents\\GitHub\\project\\RIRnewv\\LibriSpeech\\Test"+speakers[2])
-            signal4,fs = sf.read("C:\\Users\\lipov\\Documents\\GitHub\\project\\RIRnewv\\LibriSpeech\\Test"+speakers[3])
+            speakers = [self.audio_db_test.get_random_speaker() for i in range(4)]
+            soundfiles = [self.audio_db_test.get_random_file(speaker) for speaker in speakers] 
+            #speakers = ["\\5338\\24640\\5338-24640-0000.wav",
+            #            "\\3853\\163249\\3853-163249-0002.wav",
+            #            "\\8297\\275154\\8297-275154-0026.wav",
+            #            "\\6295\\244435\\6295-244435-0000.wav"]
+            signal1,fs = sf.read(soundfiles[0])
+            signal2,fs = sf.read(soundfiles[1])
+            signal3,fs = sf.read(soundfiles[2])
+            signal4,fs = sf.read(soundfiles[3])
             signals = [signal1,signal2,signal3,signal4]
              
             for idx, s in enumerate(signals):
@@ -395,19 +429,19 @@ class generate_rirs:
 
 
 
-        is_axis = False
-
+        is_axis = True
+        
         for s in self.speaker_soundfile_map.values():
 
-            if is_axis == False:
-                is_axis = True
+            if is_axis == True:
+                is_axis = False
                 axisAudio,fs= sf.read(s)
                 axisAudio = axisAudio/abs(axisAudio).max()
                 audio = axisAudio
             else:
                 audio,fs = sf.read(s)
                 audio = audio/abs(audio).max()
-                audio  = utils.get_mixed(axisAudio,audio,sir)
+                audio,_  = utils.get_mixed(axisAudio,audio,sir)
                 
             e_absorption,max_order = pra.inverse_sabine(rt60_tgt,room_dim)
             room = pra.ShoeBox(room_dim,fs = fs,max_order = max_order,materials = pra.Material(e_absorption))
@@ -441,15 +475,17 @@ class generate_rirs:
         for i in range(len(all_fg_signals)):
             for j in range(len(all_fg_signals[0])):
                 all_fg_signals[i][j] = utils.highpass_filter(all_fg_signals[i][j],50,fs)
-
+        is_axis = True
         beta = 1
+        alpha = 0
         # SNR calculations
+        #the axis is used to normalize one axis sound for snr and normlize all the rest of backgrounds for microphones according to the same snr
         if bg_recording:
             if snr != 0:
-                bg_total = np.sum(bg_signals, axis=0)
+                #bg_total = np.sum(bg_signals, axis=0)
                 max_mixed_with_bg = None
                 for i in range(6):  # for each microphone
-                    
+                    bg_total = bg_signals[i]
                     fg = []
                     for voice_idx in range(self.numOfSpeakers):
                         fg.append(all_fg_signals[voice_idx][i])
@@ -460,7 +496,11 @@ class generate_rirs:
                         max_mixed_with_bg = current_mixed_with_bg
                     else:
                         max_mixed_with_bg = np.maximum(max_mixed_with_bg, current_mixed_with_bg)
-                    bg_signals[i] = utils.get_mixed(mixed_signal, bg_total, snr)
+                    if is_axis == True:
+                        bg_signals[i],alpha = utils.get_mixed(mixed_signal, bg_total, snr)
+                        is_axis = False
+                    else:
+                        bg_signals[i] = bg_signals[i]*alpha
 
         if bg_recording:
             beta = 1 / np.max(np.abs(max_mixed_with_bg))
@@ -522,8 +562,8 @@ if __name__ == "__main__":
     g = generate_rirs()
 #speakers,datafolder,trainORtest,1,"circular
     startTime = time.time()
-    for i in range(constants.NUM_OF_ROOMS):
-        g.generateRoom(3,r"C:\Users\lipov\Documents\GitHub\project\RIRnewv\LibriSpeech","Train",1,"circular")
+    for i in range(NUM_OF_ROOMS):
+        g.generateRoom(random.randint(2, 4),"Train","circular")
     endTime = time.time()
     print(f"time: {endTime-startTime}")
 #g.setNumOfSpeakers(3)

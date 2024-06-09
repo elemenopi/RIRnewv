@@ -11,10 +11,16 @@ from pathlib import Path
 import json
 import random
 import RIRnewv.utils as utils
-from RIRnewv.data_augmentation import RandomAudioPerturbation
+from ..RIRnewv.data_augmentation import RandomAudioPerturbation
 import librosa
-from RIRnewv.constants import FAR_FIELD_RADIUS,ALL_WINDOW_SIZES
+#from RIRnewv.constants import FAR_FIELD_RADIUS,ALL_WINDOW_SIZES
 import matplotlib.pyplot as plt
+import yaml
+yaml_file_path = Path(__file__).resolve().parent / 'constants.yaml'
+with open(yaml_file_path, "r") as file:
+    config = yaml.safe_load(file)
+ALL_WINDOW_SIZES = config["ALL_WINDOW_SIZES"]
+FAR_FIELD_RADIUS = config["FAR_FIELD_RADIUS"]
 
 
 class customdataset(torch.utils.data.Dataset):
@@ -64,7 +70,7 @@ class customdataset(torch.utils.data.Dataset):
         target_voice_data = torch.sum(target_voice_data,dim = 0)
         window_idx_one_hot = torch.tensor(utils.to_categorical(curr_window_idx,num_windows)).float()
 
-        return (mixed_data,target_voice_data,window_idx_one_hot)
+        return (mixed_data,target_voice_data,window_idx_one_hot) [0,1,0,0,0]
     
     
     def get_mixture_and_gt(self,metadata,curr_dir,target_angle,curr_window_size):

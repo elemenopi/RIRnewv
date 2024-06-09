@@ -1,0 +1,11 @@
+SPEED_OF_SOUND: 343.0
+FAR_FIELD_RADIUS: 3.0
+ALL_WINDOW_SIZES: [1.57079632679, 0.785398163397, 0.3926990816987, 0.1963495408494, 0.0981747704247]
+NUM_OF_ROOMS: 3
+root_data_folder: "C:/Users/lipov/Documents/GitHub/project/RIRnewv/LibriSpeech"
+min_room_x: 12
+min_room_y: 12
+min_room_z: 3
+max_room_x: 15
+max_room_y: 15
+max_room_z: 4
